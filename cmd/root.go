@@ -4,10 +4,15 @@ Copyright © 2026 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
-	"os"
+	"fmt"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
+
+var currentGOOS = func() string {
+	return runtime.GOOS
+}
 
 func newRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -34,9 +39,10 @@ var rootCmd = newRootCmd()
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+func Execute() error {
+	if currentGOOS() != "darwin" {
+		return fmt.Errorf("dev only supports macOS")
 	}
+
+	return rootCmd.Execute()
 }
