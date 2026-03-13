@@ -12,9 +12,10 @@ func newConfigInitCmd(initializer *ConfigInitializer) *cobra.Command {
 	}
 
 	return &cobra.Command{
-		Use:   "init",
-		Short: "Initialize the user config file",
-		Args:  cobra.NoArgs,
+		Use:          "init",
+		Short:        "Initialize the user config file",
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configPath, err := initializer.Init()
 			if err != nil {

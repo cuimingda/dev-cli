@@ -53,6 +53,10 @@ func TestConfigInitCommandReturnsErrorWhenConfigFileExists(t *testing.T) {
 	}
 
 	cmd := newRootCmdWithConfigInitializer(initializer)
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
 	cmd.SetArgs([]string{"config", "init"})
 
 	err := cmd.Execute()
@@ -62,5 +66,9 @@ func TestConfigInitCommandReturnsErrorWhenConfigFileExists(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("expected already exists error, got %q", err.Error())
+	}
+
+	if strings.Contains(output.String(), "Usage:") {
+		t.Fatalf("expected error output to omit usage, got %q", output.String())
 	}
 }
