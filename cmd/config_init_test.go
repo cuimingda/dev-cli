@@ -68,7 +68,7 @@ func TestConfigInitCommandReturnsErrorWhenConfigFileExists(t *testing.T) {
 		t.Fatalf("expected already exists error, got %q", err.Error())
 	}
 
-	if strings.Contains(output.String(), "Usage:") {
-		t.Fatalf("expected error output to omit usage, got %q", output.String())
+	if output.String() != "" {
+		t.Fatalf("expected command output to be empty on error, got %q", output.String())
 	}
 }

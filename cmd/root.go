@@ -20,8 +20,9 @@ func newRootCmd() *cobra.Command {
 
 func newRootCmdWithConfigInitializer(initializer *ConfigInitializer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "dev",
-		Short: "A brief description of your application",
+		Use:           "dev",
+		Short:         "A brief description of your application",
+		SilenceErrors: true,
 		Long: `A longer description that spans multiple lines and likely contains
 examples and usage of using your application. For example:
 
