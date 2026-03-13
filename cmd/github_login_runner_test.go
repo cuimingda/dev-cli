@@ -250,12 +250,20 @@ func TestGitHubLoginCommandRequiresNoArgs(t *testing.T) {
 type stubGitHubTokenStore struct {
 	savedAccount string
 	savedToken   GitHubStoredToken
+	loadAccount  string
+	loadToken    GitHubStoredToken
+	loadErr      error
 }
 
 func (s *stubGitHubTokenStore) Save(account string, token GitHubStoredToken) error {
 	s.savedAccount = account
 	s.savedToken = token
 	return nil
+}
+
+func (s *stubGitHubTokenStore) Load(account string) (GitHubStoredToken, error) {
+	s.loadAccount = account
+	return s.loadToken, s.loadErr
 }
 
 func newGitHubLoginTestInitializer(t *testing.T) *ConfigInitializer {

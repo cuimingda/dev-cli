@@ -88,3 +88,48 @@ func TestKeychainGitHubTokenStoreSaveIncludesSecurityOutputOnFailure(t *testing.
 		t.Fatalf("error = %q, want %q", got, "write github token to keychain: exit status 36: user interaction is not allowed")
 	}
 }
+
+func TestKeychainGitHubTokenStoreLoadReadsStructuredPayload(t *testing.T) {
+	store := &KeychainGitHubTokenStore{}
+
+	issuedAt := time.Date(2026, time.March, 13, 10, 0, 0, 0, time.UTC)
+	accessTokenExpiresAt := issuedAt.Add(8 * time.Hour)
+	token := GitHubStoredToken{
+		APIBaseURL:           "https://api.github.com",
+		Host:                 "github.com",
+		AccessToken:          "access-token",
+		IssuedAt:             issuedAt,
+		AccessTokenExpiresAt: &accessTokenExpiresAt,
+	}
+
+	payload, err := json.Marshal(token)
+	if err != nil {
+		t.Fatalf("Marshal() returned error: %v", err)
+	}
+
+	store.runCommand = func(name string, args ...string) ([]byte, error) {
+		return payload, nil
+	}
+
+	loadedToken, err := store.Load("github.com")
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(loadedToken, token) {
+		t.Fatalf("loaded token = %#v, want %#v", loadedToken, token)
+	}
+}
+
+func TestKeychainGitHubTokenStoreLoadReturnsNotFoundError(t *testing.T) {
+	store := &KeychainGitHubTokenStore{
+		runCommand: func(name string, args ...string) ([]byte, error) {
+			return []byte("security: SecKeychainSearchCopyNext: The specified item could not be found in the keychain."), errors.New("exit status 44")
+		},
+	}
+
+	_, err := store.Load("github.com")
+	if !errors.Is(err, ErrGitHubTokenNotFound) {
+		t.Fatalf("Load() error = %v, want ErrGitHubTokenNotFound", err)
+	}
+}

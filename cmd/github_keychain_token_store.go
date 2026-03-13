@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -13,8 +14,11 @@ const (
 	githubTokenKeychainLabel   = cliName + " github user token"
 )
 
+var ErrGitHubTokenNotFound = errors.New("github token not found")
+
 type GitHubTokenStore interface {
 	Save(account string, token GitHubStoredToken) error
+	Load(account string) (GitHubStoredToken, error)
 }
 
 type KeychainGitHubTokenStore struct {
@@ -77,4 +81,46 @@ func (s *KeychainGitHubTokenStore) Save(account string, token GitHubStoredToken)
 	}
 
 	return nil
+}
+
+func (s *KeychainGitHubTokenStore) Load(account string) (GitHubStoredToken, error) {
+	if strings.TrimSpace(account) == "" {
+		return GitHubStoredToken{}, fmt.Errorf("keychain account is empty")
+	}
+	if s == nil || s.runCommand == nil {
+		return GitHubStoredToken{}, fmt.Errorf("keychain command runner is not configured")
+	}
+
+	output, err := s.runCommand(
+		"security",
+		"find-generic-password",
+		"-a", account,
+		"-s", githubTokenKeychainService,
+		"-w",
+	)
+	if err != nil {
+		message := strings.TrimSpace(string(output))
+		if isKeychainItemNotFound(message) {
+			return GitHubStoredToken{}, ErrGitHubTokenNotFound
+		}
+		if message == "" {
+			return GitHubStoredToken{}, fmt.Errorf("read github token from keychain: %w", err)
+		}
+
+		return GitHubStoredToken{}, fmt.Errorf("read github token from keychain: %w: %s", err, message)
+	}
+
+	var token GitHubStoredToken
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(output))), &token); err != nil {
+		return GitHubStoredToken{}, fmt.Errorf("decode github token payload: %w", err)
+	}
+
+	return token, nil
+}
+
+func isKeychainItemNotFound(message string) bool {
+	lowerMessage := strings.ToLower(strings.TrimSpace(message))
+
+	return strings.Contains(lowerMessage, "could not be found in the keychain") ||
+		strings.Contains(lowerMessage, "the specified item could not be found")
 }
