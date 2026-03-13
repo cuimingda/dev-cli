@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/adrg/xdg"
@@ -74,25 +75,39 @@ func (c *ConfigInitializer) Init() (string, error) {
 }
 
 func (c *ConfigInitializer) ListKeyValues() ([]string, error) {
-	configPath, err := c.existingConfigPath()
+	rootNode, err := c.loadConfigNode()
 	if err != nil {
 		return nil, err
 	}
 
-	configContent, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("read config file: %w", err)
-	}
-
-	var rootNode yaml.Node
-	if err := yaml.Unmarshal(configContent, &rootNode); err != nil {
-		return nil, fmt.Errorf("parse config file: %w", err)
-	}
-
-	entries := flattenYAMLNode("", &rootNode, nil)
+	entries := flattenYAMLNode("", rootNode, nil)
 	sort.Strings(entries)
 
 	return entries, nil
+}
+
+func (c *ConfigInitializer) GetValue(key string) (string, error) {
+	segments, err := splitDotPath(key)
+	if err != nil {
+		return "", err
+	}
+
+	rootNode, err := c.loadConfigNode()
+	if err != nil {
+		return "", err
+	}
+
+	valueNode, found := findYAMLNode(rootNode, segments)
+	if !found {
+		return "", fmt.Errorf("config key not found: %s", key)
+	}
+
+	switch valueNode.Kind {
+	case yaml.MappingNode, yaml.SequenceNode:
+		return "", fmt.Errorf("config key is not a scalar value: %s", key)
+	default:
+		return valueNode.Value, nil
+	}
 }
 
 func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
@@ -136,6 +151,25 @@ func (c *ConfigInitializer) existingConfigPath() (string, error) {
 	}
 
 	return configPath, nil
+}
+
+func (c *ConfigInitializer) loadConfigNode() (*yaml.Node, error) {
+	configPath, err := c.existingConfigPath()
+	if err != nil {
+		return nil, err
+	}
+
+	configContent, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(configContent, &rootNode); err != nil {
+		return nil, fmt.Errorf("parse config file: %w", err)
+	}
+
+	return &rootNode, nil
 }
 
 func flattenYAMLNode(prefix string, node *yaml.Node, entries []string) []string {
@@ -186,4 +220,64 @@ func flattenYAMLNode(prefix string, node *yaml.Node, entries []string) []string 
 	}
 
 	return entries
+}
+
+func splitDotPath(key string) ([]string, error) {
+	if strings.TrimSpace(key) == "" {
+		return nil, fmt.Errorf("config key is empty")
+	}
+
+	segments := strings.Split(key, ".")
+	for _, segment := range segments {
+		if strings.TrimSpace(segment) == "" {
+			return nil, fmt.Errorf("config key is invalid: %s", key)
+		}
+	}
+
+	return segments, nil
+}
+
+func findYAMLNode(node *yaml.Node, segments []string) (*yaml.Node, bool) {
+	if node == nil {
+		return nil, false
+	}
+
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil, false
+		}
+
+		return findYAMLNode(node.Content[0], segments)
+	}
+
+	if len(segments) == 0 {
+		return node, true
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode:
+		segment := segments[0]
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			keyNode := node.Content[index]
+			valueNode := node.Content[index+1]
+			if keyNode.Value != segment {
+				continue
+			}
+
+			return findYAMLNode(valueNode, segments[1:])
+		}
+	case yaml.SequenceNode:
+		index, err := strconv.Atoi(segments[0])
+		if err != nil || index < 0 || index >= len(node.Content) {
+			return nil, false
+		}
+
+		return findYAMLNode(node.Content[index], segments[1:])
+	default:
+		if len(segments) == 0 {
+			return node, true
+		}
+	}
+
+	return nil, false
 }
