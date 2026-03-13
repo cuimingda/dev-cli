@@ -7,20 +7,13 @@ func newGitHubLogoutCmd(runner *GitHubLogoutRunner) *cobra.Command {
 		runner = newGitHubLogoutRunner(nil)
 	}
 
-	var revokeRemote bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:          "logout",
 		Short:        "Log out from GitHub on this machine",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runner.Run(cmd.Context(), cmd.OutOrStdout(), GitHubLogoutOptions{
-				RevokeRemote: revokeRemote,
-			})
+			return runner.Run(cmd.Context(), cmd.OutOrStdout())
 		},
 	}
-
-	cmd.Flags().BoolVar(&revokeRemote, "revoke", false, "Revoke the token on GitHub before clearing local state")
-
-	return cmd
 }

@@ -3,11 +3,8 @@ package cmd
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"strings"
 )
-
-const githubClientSecretEnv = "GITHUB_CLIENT_SECRET"
 
 type githubAuthBaseConfig struct {
 	APIBaseURL  string
@@ -52,20 +49,4 @@ func loadGitHubLoginConfig(initializer *ConfigInitializer) (githubLoginConfig, e
 		AuthBaseURL: baseConfig.AuthBaseURL,
 		Account:     baseConfig.Account,
 	}, nil
-}
-
-func loadGitHubClientSecret(initializer *ConfigInitializer) (string, bool, error) {
-	if value, ok := os.LookupEnv(githubClientSecretEnv); ok {
-		trimmed := strings.TrimSpace(value)
-		if trimmed != "" {
-			return trimmed, true, nil
-		}
-	}
-
-	value, present, err := optionalConfigValue(initializer, "github.client_secret")
-	if err != nil {
-		return "", false, err
-	}
-
-	return strings.TrimSpace(value), present && strings.TrimSpace(value) != "", nil
 }
