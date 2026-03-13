@@ -140,6 +140,36 @@ func (c *ConfigInitializer) SetValue(key string, value string) error {
 	return nil
 }
 
+func (c *ConfigInitializer) UnsetValue(key string) error {
+	segments, err := splitDotPath(key)
+	if err != nil {
+		return err
+	}
+
+	rootNode, err := c.loadConfigNode()
+	if err != nil {
+		return err
+	}
+
+	deleted, _, err := deleteYAMLValueNode(rootNode, segments, nil)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return fmt.Errorf("config key not found: %s", key)
+	}
+
+	if err := c.writeConfigNode(rootNode); err != nil {
+		return err
+	}
+
+	if _, err := c.loadConfig(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
 	configPath, err := c.existingConfigPath()
 	if err != nil {
@@ -406,6 +436,89 @@ func findYAMLNode(node *yaml.Node, segments []string) (*yaml.Node, bool) {
 	}
 
 	return nil, false
+}
+
+func deleteYAMLValueNode(node *yaml.Node, segments []string, traversed []string) (bool, bool, error) {
+	if node == nil {
+		return false, false, nil
+	}
+
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return false, false, nil
+		}
+
+		deleted, prune, err := deleteYAMLValueNode(node.Content[0], segments, traversed)
+		if err != nil {
+			return false, false, err
+		}
+		if deleted && prune {
+			node.Content[0] = newMappingNode()
+		}
+
+		return deleted, false, nil
+	}
+
+	if len(segments) == 0 {
+		return false, false, nil
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode:
+		segment := segments[0]
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			keyNode := node.Content[index]
+			valueNode := node.Content[index+1]
+			if keyNode.Value != segment {
+				continue
+			}
+
+			if len(segments) == 1 {
+				node.Content = append(node.Content[:index], node.Content[index+2:]...)
+				return true, len(node.Content) == 0, nil
+			}
+
+			deleted, prune, err := deleteYAMLValueNode(valueNode, segments[1:], append(traversed, segment))
+			if err != nil {
+				return false, false, err
+			}
+			if !deleted {
+				return false, false, nil
+			}
+			if prune {
+				node.Content = append(node.Content[:index], node.Content[index+2:]...)
+			}
+
+			return true, len(node.Content) == 0, nil
+		}
+	case yaml.SequenceNode:
+		index, err := strconv.Atoi(segments[0])
+		if err != nil || index < 0 || index >= len(node.Content) {
+			return false, false, nil
+		}
+
+		if len(segments) == 1 {
+			node.Content = append(node.Content[:index], node.Content[index+1:]...)
+			return true, len(node.Content) == 0, nil
+		}
+
+		deleted, prune, err := deleteYAMLValueNode(node.Content[index], segments[1:], append(traversed, segments[0]))
+		if err != nil {
+			return false, false, err
+		}
+		if !deleted {
+			return false, false, nil
+		}
+		if prune {
+			node.Content = append(node.Content[:index], node.Content[index+1:]...)
+		}
+
+		return true, len(node.Content) == 0, nil
+	default:
+		return false, false, fmt.Errorf("config key parent is not a mapping: %s", strings.Join(traversed, "."))
+	}
+
+	return false, false, nil
 }
 
 func newKeyNode(value string) *yaml.Node {

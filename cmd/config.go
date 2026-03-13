@@ -20,6 +20,7 @@ func newConfigCmd(initializer *ConfigInitializer) *cobra.Command {
 	cmd.AddCommand(newConfigGetCmd(initializer))
 	cmd.AddCommand(newConfigListCmd(initializer))
 	cmd.AddCommand(newConfigSetCmd(initializer))
+	cmd.AddCommand(newConfigUnsetCmd(initializer))
 
 	return cmd
 }
