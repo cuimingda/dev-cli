@@ -8,17 +8,25 @@ import (
 )
 
 func TestTimezoneRunnerRunUsesIANANameFromLocaltimeSymlink(t *testing.T) {
+	originalLocal := time.Local
+	originalReadlink := readLocaltimeLink
+	t.Cleanup(func() {
+		time.Local = originalLocal
+		readLocaltimeLink = originalReadlink
+	})
+
+	time.Local = time.FixedZone("CST", 8*60*60)
+	readLocaltimeLink = func(path string) (string, error) {
+		if path != "/etc/localtime" {
+			t.Fatalf("readlink path = %q, want %q", path, "/etc/localtime")
+		}
+
+		return "/var/db/timezone/zoneinfo/Asia/Shanghai", nil
+	}
+
 	runner := &TimezoneRunner{
 		now: func() time.Time {
 			return time.Date(2026, time.March, 13, 12, 0, 0, 0, time.UTC)
-		},
-		location: time.FixedZone("CST", 8*60*60),
-		readlink: func(path string) (string, error) {
-			if path != "/etc/localtime" {
-				t.Fatalf("readlink path = %q, want %q", path, "/etc/localtime")
-			}
-
-			return "/var/db/timezone/zoneinfo/Asia/Shanghai", nil
 		},
 	}
 
@@ -33,13 +41,21 @@ func TestTimezoneRunnerRunUsesIANANameFromLocaltimeSymlink(t *testing.T) {
 }
 
 func TestTimezoneRunnerRunFallsBackToZoneAndOffset(t *testing.T) {
+	originalLocal := time.Local
+	originalReadlink := readLocaltimeLink
+	t.Cleanup(func() {
+		time.Local = originalLocal
+		readLocaltimeLink = originalReadlink
+	})
+
+	time.Local = time.FixedZone("NST", -(3*60*60 + 30*60))
+	readLocaltimeLink = func(string) (string, error) {
+		return "", errors.New("readlink failed")
+	}
+
 	runner := &TimezoneRunner{
 		now: func() time.Time {
 			return time.Date(2026, time.March, 13, 12, 0, 0, 0, time.UTC)
-		},
-		location: time.FixedZone("NST", -(3*60*60 + 30*60)),
-		readlink: func(string) (string, error) {
-			return "", errors.New("readlink failed")
 		},
 	}
 

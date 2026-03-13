@@ -15,6 +15,17 @@ import (
 
 func TestGitHubLoginRunnerRunExchangesDeviceCodeAndStoresToken(t *testing.T) {
 	initializer := newGitHubLoginTestInitializer(t)
+	originalLocal := time.Local
+	originalReadlink := readLocaltimeLink
+	t.Cleanup(func() {
+		time.Local = originalLocal
+		readLocaltimeLink = originalReadlink
+	})
+
+	time.Local = time.FixedZone("CST", 8*60*60)
+	readLocaltimeLink = func(string) (string, error) {
+		return "/var/db/timezone/zoneinfo/Asia/Shanghai", nil
+	}
 
 	var deviceCodeRequests int
 	var accessTokenRequests int
@@ -128,6 +139,12 @@ func TestGitHubLoginRunnerRunExchangesDeviceCodeAndStoresToken(t *testing.T) {
 	}
 	if !strings.Contains(commandOutput, "GitHub login succeeded. Token saved to the macOS keychain") {
 		t.Fatalf("output = %q, want success message", commandOutput)
+	}
+	if !strings.Contains(commandOutput, "Access token expires at 2026-03-14T04:00:00+08:00 (Asia/Shanghai).") {
+		t.Fatalf("output = %q, want access token expiration in local time", commandOutput)
+	}
+	if !strings.Contains(commandOutput, "Refresh token expires at 2026-09-13T20:00:00+08:00 (Asia/Shanghai).") {
+		t.Fatalf("output = %q, want refresh token expiration in local time", commandOutput)
 	}
 }
 

@@ -499,10 +499,10 @@ func tokenTimeDescription(present bool, expiresAt *time.Time, expired bool, near
 		return "present, expiration unknown"
 	}
 	if expired {
-		return fmt.Sprintf("expired at %s", expiresAt.Format(time.RFC3339))
+		return fmt.Sprintf("expired at %s", formatLocalTimeDisplay(*expiresAt))
 	}
 
-	description := fmt.Sprintf("valid until %s (%s)", expiresAt.Format(time.RFC3339), relativeTimeDescription(*expiresAt, now))
+	description := fmt.Sprintf("valid until %s (%s)", formatLocalTimeDisplay(*expiresAt), relativeTimeDescription(*expiresAt, now))
 	if nearExpiry {
 		return description + ", expires soon"
 	}
@@ -518,10 +518,10 @@ func refreshTokenTimeDescription(present bool, expiresAt *time.Time, expired boo
 		return "present, expiration unknown"
 	}
 	if expired {
-		return fmt.Sprintf("expired at %s", expiresAt.Format(time.RFC3339))
+		return fmt.Sprintf("expired at %s", formatLocalTimeDisplay(*expiresAt))
 	}
 
-	return fmt.Sprintf("valid until %s (%s)", expiresAt.Format(time.RFC3339), relativeTimeDescription(*expiresAt, now))
+	return fmt.Sprintf("valid until %s (%s)", formatLocalTimeDisplay(*expiresAt), relativeTimeDescription(*expiresAt, now))
 }
 
 func relativeTimeDescription(target time.Time, now time.Time) string {

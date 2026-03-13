@@ -10,7 +10,25 @@ import (
 	"time"
 )
 
+func useTestLocalTimezone(t *testing.T) {
+	t.Helper()
+
+	originalLocal := time.Local
+	originalReadlink := readLocaltimeLink
+	t.Cleanup(func() {
+		time.Local = originalLocal
+		readLocaltimeLink = originalReadlink
+	})
+
+	time.Local = time.FixedZone("CST", 8*60*60)
+	readLocaltimeLink = func(string) (string, error) {
+		return "/var/db/timezone/zoneinfo/Asia/Shanghai", nil
+	}
+}
+
 func TestGitHubAuthStatusRunnerRunReportsNotLoggedInWhenTokenIsMissing(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
 		t.Fatalf("SetValue() returned error: %v", err)
@@ -46,6 +64,8 @@ func TestGitHubAuthStatusRunnerRunReportsNotLoggedInWhenTokenIsMissing(t *testin
 }
 
 func TestGitHubAuthStatusRunnerEvaluateReturnsValidStateWhenRemoteProbeSucceeds(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
 		t.Fatalf("SetValue() returned error: %v", err)
@@ -105,6 +125,8 @@ func TestGitHubAuthStatusRunnerEvaluateReturnsValidStateWhenRemoteProbeSucceeds(
 }
 
 func TestGitHubAuthStatusRunnerEvaluateReturnsRefreshableStateWhenAccessTokenExpired(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
 		t.Fatalf("SetValue() returned error: %v", err)
@@ -145,6 +167,8 @@ func TestGitHubAuthStatusRunnerEvaluateReturnsRefreshableStateWhenAccessTokenExp
 }
 
 func TestGitHubAuthStatusRunnerEvaluateReturnsAuthorizationInvalidOn401(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
 		t.Fatalf("SetValue() returned error: %v", err)
@@ -193,6 +217,8 @@ func TestGitHubAuthStatusRunnerEvaluateReturnsAuthorizationInvalidOn401(t *testi
 }
 
 func TestGitHubAuthStatusRunnerEvaluateReturnsReauthenticationRequiredWhenRefreshTokenExpired(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
 		t.Fatalf("SetValue() returned error: %v", err)
@@ -230,6 +256,8 @@ func TestGitHubAuthStatusRunnerEvaluateReturnsReauthenticationRequiredWhenRefres
 }
 
 func TestGitHubAuthStatusRunnerRunRecommendsFixingConfigWhenClientIDIsMissing(t *testing.T) {
+	useTestLocalTimezone(t)
+
 	initializer := newGitHubLoginTestInitializer(t)
 
 	runner := &GitHubAuthStatusRunner{
@@ -251,6 +279,77 @@ func TestGitHubAuthStatusRunnerRunRecommendsFixingConfigWhenClientIDIsMissing(t 
 
 	if !strings.Contains(output.String(), "Recommended next step: configure `github.client_id` before logging in or refreshing") {
 		t.Fatalf("output = %q, want config recommendation", output.String())
+	}
+}
+
+func TestGitHubAuthStatusRunnerRunDisplaysTokenTimesInLocalTimezone(t *testing.T) {
+	useTestLocalTimezone(t)
+
+	initializer := newGitHubLoginTestInitializer(t)
+	if err := initializer.SetValue("github.client_id", "client-123"); err != nil {
+		t.Fatalf("SetValue() returned error: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeGitHubJSONResponse(t, w, `{"login":"octocat"}`)
+	}))
+	defer server.Close()
+
+	if err := initializer.SetValue("github.api_base_url", server.URL+"/api/v3"); err != nil {
+		t.Fatalf("SetValue() returned error: %v", err)
+	}
+
+	now := time.Date(2026, time.March, 13, 12, 0, 0, 0, time.UTC)
+	runner := &GitHubAuthStatusRunner{
+		initializer: initializer,
+		httpClient:  server.Client(),
+		now: func() time.Time {
+			return now
+		},
+		tokenStore: &stubGitHubTokenStore{
+			loadToken: GitHubStoredToken{
+				AccessToken:           "access-token",
+				RefreshToken:          "refresh-token",
+				AccessTokenExpiresAt:  timePointer(now.Add(2 * time.Hour)),
+				RefreshTokenExpiresAt: timePointer(now.Add(24 * time.Hour)),
+			},
+		},
+		expiringSoonThreshold: githubAccessTokenExpiringSoonThreshold,
+	}
+
+	var output bytes.Buffer
+	if err := runner.Run(context.Background(), &output); err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+
+	reportOutput := output.String()
+	if !strings.Contains(reportOutput, "valid until 2026-03-13T22:00:00+08:00 (Asia/Shanghai) (in 2h0m0s)") {
+		t.Fatalf("output = %q, want access token time in local timezone", reportOutput)
+	}
+	if !strings.Contains(reportOutput, "valid until 2026-03-14T20:00:00+08:00 (Asia/Shanghai) (in 24h0m0s)") {
+		t.Fatalf("output = %q, want refresh token time in local timezone", reportOutput)
+	}
+}
+
+func TestTokenTimeDescriptionDisplaysExpiredTimeInLocalTimezone(t *testing.T) {
+	useTestLocalTimezone(t)
+
+	expiresAt := time.Date(2026, time.March, 13, 12, 0, 0, 0, time.UTC)
+	description := tokenTimeDescription(true, &expiresAt, true, false, expiresAt)
+
+	if got, want := description, "expired at 2026-03-13T20:00:00+08:00 (Asia/Shanghai)"; got != want {
+		t.Fatalf("description = %q, want %q", got, want)
+	}
+}
+
+func TestRefreshTokenTimeDescriptionDisplaysExpiredTimeInLocalTimezone(t *testing.T) {
+	useTestLocalTimezone(t)
+
+	expiresAt := time.Date(2026, time.March, 13, 12, 0, 0, 0, time.UTC)
+	description := refreshTokenTimeDescription(true, &expiresAt, true, expiresAt)
+
+	if got, want := description, "expired at 2026-03-13T20:00:00+08:00 (Asia/Shanghai)"; got != want {
+		t.Fatalf("description = %q, want %q", got, want)
 	}
 }
 

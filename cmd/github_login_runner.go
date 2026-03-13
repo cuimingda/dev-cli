@@ -134,12 +134,12 @@ func (r *GitHubLoginRunner) Run(ctx context.Context, stdout io.Writer) error {
 		return err
 	}
 	if storedToken.AccessTokenExpiresAt != nil {
-		if _, err := fmt.Fprintf(stdout, "Access token expires at %s.\n", storedToken.AccessTokenExpiresAt.Format(time.RFC3339)); err != nil {
+		if _, err := fmt.Fprintf(stdout, "Access token expires at %s.\n", formatLocalTimeDisplay(*storedToken.AccessTokenExpiresAt)); err != nil {
 			return err
 		}
 	}
 	if storedToken.RefreshTokenExpiresAt != nil {
-		if _, err := fmt.Fprintf(stdout, "Refresh token expires at %s.\n", storedToken.RefreshTokenExpiresAt.Format(time.RFC3339)); err != nil {
+		if _, err := fmt.Fprintf(stdout, "Refresh token expires at %s.\n", formatLocalTimeDisplay(*storedToken.RefreshTokenExpiresAt)); err != nil {
 			return err
 		}
 	}
