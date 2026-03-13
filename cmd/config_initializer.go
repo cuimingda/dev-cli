@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -110,6 +111,35 @@ func (c *ConfigInitializer) GetValue(key string) (string, error) {
 	}
 }
 
+func (c *ConfigInitializer) SetValue(key string, value string) error {
+	segments, err := splitDotPath(key)
+	if err != nil {
+		return err
+	}
+
+	rootNode, err := c.loadConfigNode()
+	if err != nil {
+		return err
+	}
+
+	targetNode, err := ensureYAMLValueNode(rootNode, segments, nil)
+	if err != nil {
+		return err
+	}
+
+	setScalarNodeValue(targetNode, value)
+
+	if err := c.writeConfigNode(rootNode); err != nil {
+		return err
+	}
+
+	if _, err := c.loadConfig(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
 	configPath, err := c.existingConfigPath()
 	if err != nil {
@@ -170,6 +200,29 @@ func (c *ConfigInitializer) loadConfigNode() (*yaml.Node, error) {
 	}
 
 	return &rootNode, nil
+}
+
+func (c *ConfigInitializer) writeConfigNode(rootNode *yaml.Node) error {
+	configPath, err := c.existingConfigPath()
+	if err != nil {
+		return err
+	}
+
+	var buffer bytes.Buffer
+	encoder := yaml.NewEncoder(&buffer)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(rootNode); err != nil {
+		return fmt.Errorf("encode config file: %w", err)
+	}
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("close config encoder: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, buffer.Bytes(), 0o644); err != nil {
+		return fmt.Errorf("write config file: %w", err)
+	}
+
+	return nil
 }
 
 func flattenYAMLNode(prefix string, node *yaml.Node, entries []string) []string {
@@ -237,6 +290,79 @@ func splitDotPath(key string) ([]string, error) {
 	return segments, nil
 }
 
+func ensureYAMLValueNode(node *yaml.Node, segments []string, traversed []string) (*yaml.Node, error) {
+	if node == nil {
+		return nil, fmt.Errorf("config tree is empty")
+	}
+
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			node.Content = []*yaml.Node{newMappingNode()}
+		}
+
+		return ensureYAMLValueNode(node.Content[0], segments, traversed)
+	}
+
+	if len(segments) == 0 {
+		return node, nil
+	}
+
+	switch node.Kind {
+	case yaml.MappingNode:
+		segment := segments[0]
+		for index := 0; index+1 < len(node.Content); index += 2 {
+			keyNode := node.Content[index]
+			valueNode := node.Content[index+1]
+			if keyNode.Value != segment {
+				continue
+			}
+
+			if len(segments) == 1 {
+				return valueNode, nil
+			}
+
+			switch valueNode.Kind {
+			case yaml.MappingNode, yaml.SequenceNode, yaml.DocumentNode:
+				return ensureYAMLValueNode(valueNode, segments[1:], append(traversed, segment))
+			default:
+				return nil, fmt.Errorf("config key parent is not a mapping: %s", strings.Join(append(traversed, segment), "."))
+			}
+		}
+
+		var valueNode *yaml.Node
+		if len(segments) == 1 {
+			valueNode = newScalarNode("")
+		} else {
+			valueNode = newMappingNode()
+		}
+
+		node.Content = append(node.Content, newKeyNode(segment), valueNode)
+		if len(segments) == 1 {
+			return valueNode, nil
+		}
+
+		return ensureYAMLValueNode(valueNode, segments[1:], append(traversed, segment))
+	case yaml.SequenceNode:
+		index, err := strconv.Atoi(segments[0])
+		if err != nil || index < 0 || index >= len(node.Content) {
+			return nil, fmt.Errorf("config key not found: %s", strings.Join(append(traversed, segments[0]), "."))
+		}
+
+		if len(segments) == 1 {
+			return node.Content[index], nil
+		}
+
+		switch node.Content[index].Kind {
+		case yaml.MappingNode, yaml.SequenceNode, yaml.DocumentNode:
+			return ensureYAMLValueNode(node.Content[index], segments[1:], append(traversed, segments[0]))
+		default:
+			return nil, fmt.Errorf("config key parent is not a mapping: %s", strings.Join(append(traversed, segments[0]), "."))
+		}
+	default:
+		return nil, fmt.Errorf("config key parent is not a mapping: %s", strings.Join(traversed, "."))
+	}
+}
+
 func findYAMLNode(node *yaml.Node, segments []string) (*yaml.Node, bool) {
 	if node == nil {
 		return nil, false
@@ -280,4 +406,37 @@ func findYAMLNode(node *yaml.Node, segments []string) (*yaml.Node, bool) {
 	}
 
 	return nil, false
+}
+
+func newKeyNode(value string) *yaml.Node {
+	return &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: value,
+	}
+}
+
+func newMappingNode() *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
+}
+
+func newScalarNode(value string) *yaml.Node {
+	return &yaml.Node{
+		Kind:  yaml.ScalarNode,
+		Tag:   "!!str",
+		Value: value,
+	}
+}
+
+func setScalarNodeValue(node *yaml.Node, value string) {
+	node.Kind = yaml.ScalarNode
+	node.Tag = "!!str"
+	node.Style = 0
+	node.Value = value
+	node.Anchor = ""
+	node.Alias = nil
+	node.Content = nil
 }

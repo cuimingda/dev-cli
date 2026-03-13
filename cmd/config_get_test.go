@@ -154,7 +154,7 @@ func TestConfigGetCommandRequiresExactlyOneArg(t *testing.T) {
 		t.Fatal("expected Execute() to return an error when key argument is missing")
 	}
 
-	if !strings.Contains(err.Error(), "dev config get requires exactly 1 key argument") {
+	if !strings.Contains(err.Error(), "dev config get requires exactly 1 argument: KEY") {
 		t.Fatalf("expected argument error, got %q", err.Error())
 	}
 

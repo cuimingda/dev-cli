@@ -30,7 +30,7 @@ func newConfigGetCmd(initializer *ConfigInitializer) *cobra.Command {
 
 func requireSingleConfigKeyArg(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("%s requires exactly 1 key argument", cmd.CommandPath())
+		return fmt.Errorf("%s requires exactly 1 argument: KEY", cmd.CommandPath())
 	}
 
 	return nil
