@@ -36,6 +36,7 @@ to quickly create a Cobra application.`,
 
 	cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	cmd.AddCommand(newConfigCmd(initializer))
+	cmd.AddCommand(newGitHubCmd(initializer, nil))
 
 	return cmd
 }
