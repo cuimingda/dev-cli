@@ -73,7 +73,7 @@ func (c *ConfigInitializer) Init() (string, error) {
 	return configPath, nil
 }
 
-func (c *ConfigInitializer) ListDotPaths() ([]string, error) {
+func (c *ConfigInitializer) ListKeyValues() ([]string, error) {
 	configPath, err := c.existingConfigPath()
 	if err != nil {
 		return nil, err
@@ -89,10 +89,10 @@ func (c *ConfigInitializer) ListDotPaths() ([]string, error) {
 		return nil, fmt.Errorf("parse config file: %w", err)
 	}
 
-	paths := flattenYAMLNode("", &rootNode, nil)
-	sort.Strings(paths)
+	entries := flattenYAMLNode("", &rootNode, nil)
+	sort.Strings(entries)
 
-	return paths, nil
+	return entries, nil
 }
 
 func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
@@ -138,17 +138,22 @@ func (c *ConfigInitializer) existingConfigPath() (string, error) {
 	return configPath, nil
 }
 
-func flattenYAMLNode(prefix string, node *yaml.Node, paths []string) []string {
+func flattenYAMLNode(prefix string, node *yaml.Node, entries []string) []string {
 	if node == nil {
-		return paths
+		return entries
 	}
 
 	switch node.Kind {
 	case yaml.DocumentNode:
 		for _, child := range node.Content {
-			paths = flattenYAMLNode(prefix, child, paths)
+			entries = flattenYAMLNode(prefix, child, entries)
 		}
 	case yaml.MappingNode:
+		if len(node.Content) == 0 && prefix != "" {
+			entries = append(entries, prefix+"=")
+			return entries
+		}
+
 		for index := 0; index+1 < len(node.Content); index += 2 {
 			keyNode := node.Content[index]
 			valueNode := node.Content[index+1]
@@ -158,22 +163,27 @@ func flattenYAMLNode(prefix string, node *yaml.Node, paths []string) []string {
 				nextPrefix = prefix + "." + keyNode.Value
 			}
 
-			paths = flattenYAMLNode(nextPrefix, valueNode, paths)
+			entries = flattenYAMLNode(nextPrefix, valueNode, entries)
 		}
 	case yaml.SequenceNode:
+		if len(node.Content) == 0 && prefix != "" {
+			entries = append(entries, prefix+"=")
+			return entries
+		}
+
 		for index, item := range node.Content {
 			nextPrefix := fmt.Sprintf("%d", index)
 			if prefix != "" {
 				nextPrefix = fmt.Sprintf("%s.%d", prefix, index)
 			}
 
-			paths = flattenYAMLNode(nextPrefix, item, paths)
+			entries = flattenYAMLNode(nextPrefix, item, entries)
 		}
 	default:
 		if prefix != "" {
-			paths = append(paths, prefix)
+			entries = append(entries, prefix+"="+node.Value)
 		}
 	}
 
-	return paths
+	return entries
 }

@@ -13,17 +13,17 @@ func newConfigListCmd(initializer *ConfigInitializer) *cobra.Command {
 
 	return &cobra.Command{
 		Use:          "list",
-		Short:        "List config keys as dot paths",
+		Short:        "List config values as key=value pairs",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			paths, err := initializer.ListDotPaths()
+			entries, err := initializer.ListKeyValues()
 			if err != nil {
 				return err
 			}
 
-			for _, path := range paths {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), path); err != nil {
+			for _, entry := range entries {
+				if _, err := fmt.Fprintln(cmd.OutOrStdout(), entry); err != nil {
 					return err
 				}
 			}

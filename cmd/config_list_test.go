@@ -11,7 +11,7 @@ import (
 	configtemplate "github.com/cuimingda/dev-cli/config"
 )
 
-func TestConfigInitializerListDotPaths(t *testing.T) {
+func TestConfigInitializerListKeyValues(t *testing.T) {
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
 		templateYAML: configtemplate.TemplateYAML(),
@@ -35,22 +35,22 @@ func TestConfigInitializerListDotPaths(t *testing.T) {
 		t.Fatalf("WriteFile() returned error: %v", err)
 	}
 
-	paths, err := initializer.ListDotPaths()
+	entries, err := initializer.ListKeyValues()
 	if err != nil {
-		t.Fatalf("ListDotPaths() returned error: %v", err)
+		t.Fatalf("ListKeyValues() returned error: %v", err)
 	}
 
 	want := []string{
-		"github.api_base_url",
-		"github.client_id",
-		"github.nested.callback_url",
+		"github.api_base_url=https://api.github.com",
+		"github.client_id=",
+		"github.nested.callback_url=https://example.com/callback",
 	}
-	if !reflect.DeepEqual(paths, want) {
-		t.Fatalf("ListDotPaths() = %#v, want %#v", paths, want)
+	if !reflect.DeepEqual(entries, want) {
+		t.Fatalf("ListKeyValues() = %#v, want %#v", entries, want)
 	}
 }
 
-func TestConfigListCommandListsDotPaths(t *testing.T) {
+func TestConfigListCommandListsKeyValues(t *testing.T) {
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
 		templateYAML: configtemplate.TemplateYAML(),
@@ -77,8 +77,8 @@ func TestConfigListCommandListsDotPaths(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"github.api_base_url",
-		"github.client_id",
+		"github.api_base_url=https://api.github.com",
+		"github.client_id=",
 		"",
 	}, "\n")
 	if output.String() != want {
