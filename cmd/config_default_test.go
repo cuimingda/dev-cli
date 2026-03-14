@@ -23,6 +23,7 @@ func TestConfigInitializerListDefaultKeyValues(t *testing.T) {
 
 	want := []string{
 		"github.api_base_url=https://api.github.com",
+		"workspace.root=$HOME/Projects",
 	}
 	if !reflect.DeepEqual(entries, want) {
 		t.Fatalf("ListDefaultKeyValues() = %#v, want %#v", entries, want)
@@ -49,6 +50,7 @@ func TestConfigDefaultCommandListsKeyValues(t *testing.T) {
 
 	want := strings.Join([]string{
 		"github.api_base_url=https://api.github.com",
+		"workspace.root=$HOME/Projects",
 		"",
 	}, "\n")
 	if output.String() != want {

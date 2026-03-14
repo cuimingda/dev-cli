@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,8 @@ const (
 	cliName             = "dev"
 	configFileName      = "config.yaml"
 )
+
+var envReferencePattern = regexp.MustCompile(`\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)`)
 
 type ConfigInitializer struct {
 	configHome   string
@@ -326,7 +329,10 @@ func (c *ConfigInitializer) loadResolvedConfigNode() (*yaml.Node, error) {
 	}
 
 	resolvedNode := mergeYAMLNodes(cloneYAMLNode(templateNode), defaultNode)
-	return mergeYAMLNodes(resolvedNode, userNode), nil
+	resolvedNode = mergeYAMLNodes(resolvedNode, userNode)
+	expandYAMLScalarEnvVars(resolvedNode)
+
+	return resolvedNode, nil
 }
 
 func (c *ConfigInitializer) loadConfigNodeFromPath(configPath string) (*yaml.Node, error) {
@@ -625,6 +631,40 @@ func mergeYAMLNodes(base *yaml.Node, override *yaml.Node) *yaml.Node {
 	}
 
 	return cloneYAMLNode(override)
+}
+
+func expandYAMLScalarEnvVars(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+
+	if node.Kind == yaml.ScalarNode {
+		node.Value = expandEnvVariables(node.Value)
+		return
+	}
+
+	for _, child := range node.Content {
+		expandYAMLScalarEnvVars(child)
+	}
+}
+
+func expandEnvVariables(value string) string {
+	if value == "" {
+		return value
+	}
+
+	return envReferencePattern.ReplaceAllStringFunc(value, func(match string) string {
+		key := strings.TrimPrefix(match, "$")
+		if strings.HasPrefix(key, "{") && strings.HasSuffix(key, "}") {
+			key = strings.TrimSuffix(strings.TrimPrefix(key, "{"), "}")
+		}
+
+		if expanded, ok := os.LookupEnv(key); ok {
+			return expanded
+		}
+
+		return match
+	})
 }
 
 func findMappingValueIndex(node *yaml.Node, key string) (int, bool) {

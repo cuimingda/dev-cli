@@ -10,6 +10,8 @@ import (
 )
 
 func TestConfigInitializerGetResolvedValueUsesDefaults(t *testing.T) {
+	t.Setenv("HOME", "/tmp/dev-cli-home")
+
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
 		templateYAML: configtemplate.TemplateYAML(),
@@ -31,9 +33,19 @@ func TestConfigInitializerGetResolvedValueUsesDefaults(t *testing.T) {
 	if clientID != "" {
 		t.Fatalf("GetResolvedValue() = %q, want empty string", clientID)
 	}
+
+	workspaceRoot, err := initializer.GetResolvedValue("workspace.root")
+	if err != nil {
+		t.Fatalf("GetResolvedValue() returned error for workspace.root: %v", err)
+	}
+	if workspaceRoot != "/tmp/dev-cli-home/Projects" {
+		t.Fatalf("GetResolvedValue() = %q, want %q", workspaceRoot, "/tmp/dev-cli-home/Projects")
+	}
 }
 
 func TestConfigInitializerListResolvedKeyValuesMergesDefaultsAndUserConfig(t *testing.T) {
+	t.Setenv("HOME", "/tmp/dev-cli-home")
+
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
 		templateYAML: configtemplate.TemplateYAML(),
@@ -62,6 +74,7 @@ func TestConfigInitializerListResolvedKeyValuesMergesDefaultsAndUserConfig(t *te
 		"github.api_base_url=https://ghe.example.com/api/v3",
 		"github.client_id=abc123",
 		"github.nested.callback_url=https://example.com/callback",
+		"workspace.root=/tmp/dev-cli-home/Projects",
 	}
 	if !reflect.DeepEqual(entries, want) {
 		t.Fatalf("ListResolvedKeyValues() = %#v, want %#v", entries, want)
@@ -69,6 +82,8 @@ func TestConfigInitializerListResolvedKeyValuesMergesDefaultsAndUserConfig(t *te
 }
 
 func TestConfigResolvedCommandListsResolvedKeyValuesWithoutUserFile(t *testing.T) {
+	t.Setenv("HOME", "/tmp/dev-cli-home")
+
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
 		templateYAML: configtemplate.TemplateYAML(),
@@ -89,6 +104,7 @@ func TestConfigResolvedCommandListsResolvedKeyValuesWithoutUserFile(t *testing.T
 	want := strings.Join([]string{
 		"github.api_base_url=https://api.github.com",
 		"github.client_id=",
+		"workspace.root=/tmp/dev-cli-home/Projects",
 		"",
 	}, "\n")
 	if output.String() != want {
