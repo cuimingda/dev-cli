@@ -37,10 +37,11 @@ type RepoListEntry struct {
 }
 
 type RepoListReport struct {
-	Entries           []RepoListEntry
-	TotalCount        int
-	LocalCloneCount   int
-	LocalMissingCount int
+	Entries                []RepoListEntry
+	TotalCount             int
+	LocalCloneCount        int
+	LocalMissingCount      int
+	SelfOwnedExcludedCount int
 }
 
 type gitHubRepoOwner struct {
@@ -99,6 +100,12 @@ func (r *RepoListRunner) Run(ctx context.Context, stdout io.Writer) error {
 		}
 	}
 
+	if report.SelfOwnedExcludedCount > 0 {
+		if _, err := fmt.Fprintf(stdout, "Note: excluded %d self-owned repos.\n", report.SelfOwnedExcludedCount); err != nil {
+			return err
+		}
+	}
+
 	_, err = fmt.Fprintf(
 		stdout,
 		"Summary: total=%d, cloned=%d, missing=%d\n",
@@ -150,6 +157,7 @@ func (r *RepoListRunner) Evaluate(ctx context.Context) (RepoListReport, error) {
 	report := RepoListReport{}
 	for _, repository := range repositories {
 		if strings.EqualFold(strings.TrimSpace(repository.Owner.Login), strings.TrimSpace(currentUser.Login)) {
+			report.SelfOwnedExcludedCount++
 			continue
 		}
 

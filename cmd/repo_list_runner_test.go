@@ -111,6 +111,9 @@ func TestRepoListRunnerEvaluateFiltersOwnedReposPaginatesAndMatchesLocalStatus(t
 	if report.LocalMissingCount != 3 {
 		t.Fatalf("LocalMissingCount = %d, want %d", report.LocalMissingCount, 3)
 	}
+	if report.SelfOwnedExcludedCount != 1 {
+		t.Fatalf("SelfOwnedExcludedCount = %d, want %d", report.SelfOwnedExcludedCount, 1)
+	}
 	if len(repositoryPageRequests) != 3 {
 		t.Fatalf("repository page requests = %#v, want 3 pages", repositoryPageRequests)
 	}
@@ -165,6 +168,9 @@ func TestRepoListRunnerEvaluateTreatsMissingWorkspaceRootAsNoLocalClones(t *test
 	if report.LocalCloneCount != 0 || report.LocalMissingCount != 1 || report.TotalCount != 1 {
 		t.Fatalf("report = %#v, want total=1 cloned=0 missing=1", report)
 	}
+	if report.SelfOwnedExcludedCount != 0 {
+		t.Fatalf("SelfOwnedExcludedCount = %d, want %d", report.SelfOwnedExcludedCount, 0)
+	}
 }
 
 func TestRepoListRunnerRunPrintsProgressEntriesAndSummary(t *testing.T) {
@@ -211,6 +217,57 @@ func TestRepoListRunnerRunPrintsProgressEntriesAndSummary(t *testing.T) {
 		"Fetching repositories from GitHub...",
 		"github.com/acme/alpha - ❌",
 		"Summary: total=1, cloned=0, missing=1",
+		"",
+	}, "\n")
+	if output.String() != want {
+		t.Fatalf("output = %q, want %q", output.String(), want)
+	}
+}
+
+func TestRepoListRunnerRunPrintsExcludedSelfOwnedNote(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/v3/user":
+			writeGitHubJSONResponse(t, w, `{"login":"octocat"}`)
+		case "/api/v3/user/repos":
+			writeGitHubJSONResponse(t, w, `[{"name":"self-repo","owner":{"login":"octocat"}}]`)
+		default:
+			t.Fatalf("unexpected request path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	configInitializer := &ConfigInitializer{
+		configHome:   t.TempDir(),
+		templateYAML: configtemplate.TemplateYAML(),
+		defaultYAML:  configtemplate.DefaultYAML(),
+	}
+	if _, err := configInitializer.Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+	if err := configInitializer.SetValue("workspace.root", filepath.Join(t.TempDir(), "missing")); err != nil {
+		t.Fatalf("SetValue() returned error: %v", err)
+	}
+	if err := configInitializer.SetValue("github.api_base_url", server.URL+"/api/v3"); err != nil {
+		t.Fatalf("SetValue() returned error: %v", err)
+	}
+
+	runner := &RepoListRunner{
+		initializer: configInitializer,
+		authService: &stubGitHubAccessTokenProvider{token: "access-token"},
+		httpClient:  server.Client(),
+		pageSize:    100,
+	}
+
+	var output bytes.Buffer
+	if err := runner.Run(context.Background(), &output); err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+
+	want := strings.Join([]string{
+		"Fetching repositories from GitHub...",
+		"Note: excluded 1 self-owned repos.",
+		"Summary: total=0, cloned=0, missing=0",
 		"",
 	}, "\n")
 	if output.String() != want {
