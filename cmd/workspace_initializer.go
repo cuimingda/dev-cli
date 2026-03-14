@@ -26,14 +26,9 @@ func (w *WorkspaceInitializer) Init() (string, error) {
 		w.configInitializer = newDefaultConfigInitializer()
 	}
 
-	workspaceRoot, err := w.configInitializer.GetResolvedValue("workspace.root")
+	workspaceRoot, err := resolvedWorkspaceRoot(w.configInitializer)
 	if err != nil {
 		return "", err
-	}
-
-	workspaceRoot = strings.TrimSpace(workspaceRoot)
-	if workspaceRoot == "" {
-		return "", fmt.Errorf("config value workspace.root is empty")
 	}
 
 	if _, err := os.Stat(workspaceRoot); err == nil {
@@ -44,6 +39,24 @@ func (w *WorkspaceInitializer) Init() (string, error) {
 
 	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
 		return "", fmt.Errorf("create workspace directory: %w", err)
+	}
+
+	return workspaceRoot, nil
+}
+
+func resolvedWorkspaceRoot(configInitializer *ConfigInitializer) (string, error) {
+	if configInitializer == nil {
+		configInitializer = newDefaultConfigInitializer()
+	}
+
+	workspaceRoot, err := configInitializer.GetResolvedValue("workspace.root")
+	if err != nil {
+		return "", err
+	}
+
+	workspaceRoot = strings.TrimSpace(workspaceRoot)
+	if workspaceRoot == "" {
+		return "", fmt.Errorf("config value workspace.root is empty")
 	}
 
 	return workspaceRoot, nil
