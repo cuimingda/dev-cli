@@ -132,6 +132,11 @@ func (c *ConfigInitializer) SetValue(key string, value string) error {
 		return err
 	}
 
+	normalizedValue, err := normalizeConfigValueForStorage(key, value)
+	if err != nil {
+		return err
+	}
+
 	rootNode, err := c.loadConfigNode()
 	if err != nil {
 		return err
@@ -142,7 +147,7 @@ func (c *ConfigInitializer) SetValue(key string, value string) error {
 		return err
 	}
 
-	setScalarNodeValue(targetNode, value)
+	setScalarNodeValue(targetNode, normalizedValue)
 
 	if err := c.writeConfigNode(rootNode); err != nil {
 		return err
@@ -665,6 +670,50 @@ func expandEnvVariables(value string) string {
 
 		return match
 	})
+}
+
+func normalizeConfigValueForStorage(key string, value string) (string, error) {
+	if key != "workspace.root" {
+		return value, nil
+	}
+
+	return expandHomePathReferences(value)
+}
+
+func expandHomePathReferences(value string) (string, error) {
+	if value == "" {
+		return value, nil
+	}
+	if !strings.Contains(value, "$HOME") && !strings.Contains(value, "${HOME}") && !hasLeadingTilde(value) {
+		return value, nil
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home directory: %w", err)
+	}
+
+	normalized := strings.ReplaceAll(value, "${HOME}", homeDir)
+	normalized = strings.ReplaceAll(normalized, "$HOME", homeDir)
+
+	switch {
+	case normalized == "~":
+		return homeDir, nil
+	case strings.HasPrefix(normalized, "~/"):
+		return filepath.Join(homeDir, strings.TrimPrefix(normalized, "~/")), nil
+	case strings.HasPrefix(normalized, "~\\"):
+		return filepath.Join(homeDir, strings.TrimPrefix(normalized, "~\\")), nil
+	default:
+		return normalized, nil
+	}
+}
+
+func hasLeadingTilde(value string) bool {
+	if value == "~" {
+		return true
+	}
+
+	return strings.HasPrefix(value, "~/") || strings.HasPrefix(value, "~\\")
 }
 
 func findMappingValueIndex(node *yaml.Node, key string) (int, bool) {

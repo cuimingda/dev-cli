@@ -58,6 +58,60 @@ func TestConfigInitializerSetValueCreatesNestedKey(t *testing.T) {
 	}
 }
 
+func TestConfigInitializerSetValueExpandsWorkspaceRootHomeReferences(t *testing.T) {
+	t.Setenv("HOME", "/tmp/dev-cli-home")
+
+	initializer := &ConfigInitializer{
+		configHome:   t.TempDir(),
+		templateYAML: configtemplate.TemplateYAML(),
+	}
+
+	if _, err := initializer.Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	testCases := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{
+			name:  "dollar home",
+			value: "$HOME/Projects",
+			want:  "/tmp/dev-cli-home/Projects",
+		},
+		{
+			name:  "tilde",
+			value: "~/Projects",
+			want:  "/tmp/dev-cli-home/Projects",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if err := initializer.SetValue("workspace.root", testCase.value); err != nil {
+				t.Fatalf("SetValue() returned error: %v", err)
+			}
+
+			value, err := initializer.GetValue("workspace.root")
+			if err != nil {
+				t.Fatalf("GetValue() returned error: %v", err)
+			}
+			if value != testCase.want {
+				t.Fatalf("GetValue() = %q, want %q", value, testCase.want)
+			}
+
+			content, err := os.ReadFile(initializer.DefaultPath())
+			if err != nil {
+				t.Fatalf("ReadFile() returned error: %v", err)
+			}
+			if !strings.Contains(string(content), testCase.want) {
+				t.Fatalf("config content = %q, want it to contain %q", string(content), testCase.want)
+			}
+		})
+	}
+}
+
 func TestConfigInitializerSetValueReturnsErrorWhenParentIsScalar(t *testing.T) {
 	initializer := &ConfigInitializer{
 		configHome:   t.TempDir(),
@@ -120,6 +174,42 @@ func TestConfigSetCommandWritesValue(t *testing.T) {
 
 	if value != "abc123" {
 		t.Fatalf("GetValue() = %q, want %q", value, "abc123")
+	}
+}
+
+func TestConfigSetCommandPrintsNormalizedWorkspaceRoot(t *testing.T) {
+	t.Setenv("HOME", "/tmp/dev-cli-home")
+
+	initializer := &ConfigInitializer{
+		configHome:   t.TempDir(),
+		templateYAML: configtemplate.TemplateYAML(),
+	}
+
+	if _, err := initializer.Init(); err != nil {
+		t.Fatalf("Init() returned error: %v", err)
+	}
+
+	cmd := newRootCmdWithConfigInitializer(initializer)
+	var output bytes.Buffer
+
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"config", "set", "workspace.root", "~/Projects"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() returned error: %v", err)
+	}
+
+	if output.String() != "workspace.root=/tmp/dev-cli-home/Projects\n" {
+		t.Fatalf("output = %q, want %q", output.String(), "workspace.root=/tmp/dev-cli-home/Projects\n")
+	}
+
+	value, err := initializer.GetValue("workspace.root")
+	if err != nil {
+		t.Fatalf("GetValue() returned error: %v", err)
+	}
+	if value != "/tmp/dev-cli-home/Projects" {
+		t.Fatalf("GetValue() = %q, want %q", value, "/tmp/dev-cli-home/Projects")
 	}
 }
 

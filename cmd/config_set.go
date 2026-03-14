@@ -21,7 +21,12 @@ func newConfigSetCmd(initializer *ConfigInitializer) *cobra.Command {
 				return err
 			}
 
-			_, err := fmt.Fprintf(cmd.OutOrStdout(), "%s=%s\n", args[0], args[1])
+			storedValue, err := initializer.GetValue(args[0])
+			if err != nil {
+				return err
+			}
+
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "%s=%s\n", args[0], storedValue)
 			return err
 		},
 	}
