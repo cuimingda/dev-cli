@@ -22,10 +22,10 @@ func (s *stubGitHubAccessTokenProvider) EnsureValidToken(context.Context) (strin
 	return s.token, s.err
 }
 
-func TestRepoListRunnerEvaluateFiltersOwnedReposPaginatesAndMatchesLocalStatus(t *testing.T) {
+func TestRepoListRunnerEvaluateKeepsSelfOwnedReposPaginatesAndMatchesLocalStatus(t *testing.T) {
 	workspaceRoot := t.TempDir()
-	createWorkspaceProject(t, workspaceRoot, "alpha", `[remote "origin"]`+"\n\turl = git@github.com:acme/alpha.git\n")
-	createWorkspaceProject(t, workspaceRoot, "beta", `[remote "origin"]`+"\n\turl = git@github.com:someone-else/beta.git\n")
+	createWorkspaceProject(t, workspaceRoot, "self-repo", `[remote "origin"]`+"\n\turl = git@github.com:octocat/self-repo.git\n")
+	createWorkspaceProject(t, workspaceRoot, "alpha", `[remote "origin"]`+"\n\turl = git@github.com:someone-else/alpha.git\n")
 	createWorkspaceProject(t, workspaceRoot, "gamma", `[core]`+"\n\trepositoryformatversion = 0\n")
 
 	var repositoryPageRequests []string
@@ -46,7 +46,7 @@ func TestRepoListRunnerEvaluateFiltersOwnedReposPaginatesAndMatchesLocalStatus(t
 			case "1":
 				writeGitHubJSONResponse(t, w, `[
 					{"name":"self-repo","owner":{"login":"octocat"}},
-					{"name":"alpha","owner":{"login":"acme"}}
+					{"name":"alpha","owner":{"login":"octocat"}}
 				]`)
 			case "2":
 				writeGitHubJSONResponse(t, w, `[
@@ -55,7 +55,7 @@ func TestRepoListRunnerEvaluateFiltersOwnedReposPaginatesAndMatchesLocalStatus(t
 				]`)
 			case "3":
 				writeGitHubJSONResponse(t, w, `[
-					{"name":"delta","owner":{"login":"org"}}
+					{"name":"delta","owner":{"login":"octocat"}}
 				]`)
 			default:
 				writeGitHubJSONResponse(t, w, `[]`)
@@ -94,25 +94,21 @@ func TestRepoListRunnerEvaluateFiltersOwnedReposPaginatesAndMatchesLocalStatus(t
 	}
 
 	wantEntries := []RepoListEntry{
-		{RemotePath: "github.com/acme/alpha", Present: true},
-		{RemotePath: "github.com/org/delta", Present: false},
-		{RemotePath: "github.com/org/gamma", Present: false},
-		{RemotePath: "github.com/team/beta", Present: false},
+		{RemotePath: "github.com/octocat/alpha", Present: false},
+		{RemotePath: "github.com/octocat/delta", Present: false},
+		{RemotePath: "github.com/octocat/self-repo", Present: true},
 	}
 	if !reflect.DeepEqual(report.Entries, wantEntries) {
 		t.Fatalf("Entries = %#v, want %#v", report.Entries, wantEntries)
 	}
-	if report.TotalCount != 4 {
-		t.Fatalf("TotalCount = %d, want %d", report.TotalCount, 4)
+	if report.TotalCount != 3 {
+		t.Fatalf("TotalCount = %d, want %d", report.TotalCount, 3)
 	}
 	if report.LocalCloneCount != 1 {
 		t.Fatalf("LocalCloneCount = %d, want %d", report.LocalCloneCount, 1)
 	}
-	if report.LocalMissingCount != 3 {
-		t.Fatalf("LocalMissingCount = %d, want %d", report.LocalMissingCount, 3)
-	}
-	if report.SelfOwnedExcludedCount != 1 {
-		t.Fatalf("SelfOwnedExcludedCount = %d, want %d", report.SelfOwnedExcludedCount, 1)
+	if report.LocalMissingCount != 2 {
+		t.Fatalf("LocalMissingCount = %d, want %d", report.LocalMissingCount, 2)
 	}
 	if len(repositoryPageRequests) != 3 {
 		t.Fatalf("repository page requests = %#v, want 3 pages", repositoryPageRequests)
@@ -125,7 +121,7 @@ func TestRepoListRunnerEvaluateTreatsMissingWorkspaceRootAsNoLocalClones(t *test
 		case "/api/v3/user":
 			writeGitHubJSONResponse(t, w, `{"login":"octocat"}`)
 		case "/api/v3/user/repos":
-			writeGitHubJSONResponse(t, w, `[{"name":"alpha","owner":{"login":"acme"}}]`)
+			writeGitHubJSONResponse(t, w, `[{"name":"alpha","owner":{"login":"octocat"}}]`)
 		default:
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
@@ -160,16 +156,13 @@ func TestRepoListRunnerEvaluateTreatsMissingWorkspaceRootAsNoLocalClones(t *test
 	}
 
 	wantEntries := []RepoListEntry{
-		{RemotePath: "github.com/acme/alpha", Present: false},
+		{RemotePath: "github.com/octocat/alpha", Present: false},
 	}
 	if !reflect.DeepEqual(report.Entries, wantEntries) {
 		t.Fatalf("Entries = %#v, want %#v", report.Entries, wantEntries)
 	}
 	if report.LocalCloneCount != 0 || report.LocalMissingCount != 1 || report.TotalCount != 1 {
 		t.Fatalf("report = %#v, want total=1 cloned=0 missing=1", report)
-	}
-	if report.SelfOwnedExcludedCount != 0 {
-		t.Fatalf("SelfOwnedExcludedCount = %d, want %d", report.SelfOwnedExcludedCount, 0)
 	}
 }
 
@@ -179,7 +172,7 @@ func TestRepoListRunnerRunPrintsProgressEntriesAndSummary(t *testing.T) {
 		case "/api/v3/user":
 			writeGitHubJSONResponse(t, w, `{"login":"octocat"}`)
 		case "/api/v3/user/repos":
-			writeGitHubJSONResponse(t, w, `[{"name":"alpha","owner":{"login":"acme"}}]`)
+			writeGitHubJSONResponse(t, w, `[{"name":"alpha","owner":{"login":"octocat"}}]`)
 		default:
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
@@ -215,59 +208,8 @@ func TestRepoListRunnerRunPrintsProgressEntriesAndSummary(t *testing.T) {
 
 	want := strings.Join([]string{
 		"Fetching repositories from GitHub...",
-		"github.com/acme/alpha - ❌",
+		"github.com/octocat/alpha - ❌",
 		"Summary: total=1, cloned=0, missing=1",
-		"",
-	}, "\n")
-	if output.String() != want {
-		t.Fatalf("output = %q, want %q", output.String(), want)
-	}
-}
-
-func TestRepoListRunnerRunPrintsExcludedSelfOwnedNote(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v3/user":
-			writeGitHubJSONResponse(t, w, `{"login":"octocat"}`)
-		case "/api/v3/user/repos":
-			writeGitHubJSONResponse(t, w, `[{"name":"self-repo","owner":{"login":"octocat"}}]`)
-		default:
-			t.Fatalf("unexpected request path: %s", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	configInitializer := &ConfigInitializer{
-		configHome:   t.TempDir(),
-		templateYAML: configtemplate.TemplateYAML(),
-		defaultYAML:  configtemplate.DefaultYAML(),
-	}
-	if _, err := configInitializer.Init(); err != nil {
-		t.Fatalf("Init() returned error: %v", err)
-	}
-	if err := configInitializer.SetValue("workspace.root", filepath.Join(t.TempDir(), "missing")); err != nil {
-		t.Fatalf("SetValue() returned error: %v", err)
-	}
-	if err := configInitializer.SetValue("github.api_base_url", server.URL+"/api/v3"); err != nil {
-		t.Fatalf("SetValue() returned error: %v", err)
-	}
-
-	runner := &RepoListRunner{
-		initializer: configInitializer,
-		authService: &stubGitHubAccessTokenProvider{token: "access-token"},
-		httpClient:  server.Client(),
-		pageSize:    100,
-	}
-
-	var output bytes.Buffer
-	if err := runner.Run(context.Background(), &output); err != nil {
-		t.Fatalf("Run() returned error: %v", err)
-	}
-
-	want := strings.Join([]string{
-		"Fetching repositories from GitHub...",
-		"Note: excluded 1 self-owned repos.",
-		"Summary: total=0, cloned=0, missing=0",
 		"",
 	}, "\n")
 	if output.String() != want {
