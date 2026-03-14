@@ -25,12 +25,14 @@ const (
 type ConfigInitializer struct {
 	configHome   string
 	templateYAML string
+	defaultYAML  string
 }
 
 func newDefaultConfigInitializer() *ConfigInitializer {
 	return &ConfigInitializer{
 		configHome:   xdg.ConfigHome,
 		templateYAML: configtemplate.TemplateYAML(),
+		defaultYAML:  configtemplate.DefaultYAML(),
 	}
 }
 
@@ -44,7 +46,8 @@ func (c *ConfigInitializer) Init() (string, error) {
 		return "", err
 	}
 
-	if strings.TrimSpace(c.templateYAML) == "" {
+	templateYAML := c.templateContent()
+	if strings.TrimSpace(templateYAML) == "" {
 		return "", fmt.Errorf("config template is empty")
 	}
 
@@ -56,7 +59,7 @@ func (c *ConfigInitializer) Init() (string, error) {
 
 	validator := viper.New()
 	validator.SetConfigType("yaml")
-	if err := validator.ReadConfig(strings.NewReader(c.templateYAML)); err != nil {
+	if err := validator.ReadConfig(strings.NewReader(templateYAML)); err != nil {
 		return "", fmt.Errorf("parse config template: %w", err)
 	}
 
@@ -64,7 +67,7 @@ func (c *ConfigInitializer) Init() (string, error) {
 		return "", fmt.Errorf("create config directory: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, []byte(c.templateYAML), 0o644); err != nil {
+	if err := os.WriteFile(configPath, []byte(templateYAML), 0o644); err != nil {
 		return "", fmt.Errorf("write config file: %w", err)
 	}
 
@@ -81,34 +84,43 @@ func (c *ConfigInitializer) ListKeyValues() ([]string, error) {
 		return nil, err
 	}
 
-	entries := flattenYAMLNode("", rootNode, nil)
-	sort.Strings(entries)
+	return flattenKeyValues(rootNode), nil
+}
 
-	return entries, nil
+func (c *ConfigInitializer) ListDefaultKeyValues() ([]string, error) {
+	rootNode, err := c.loadDefaultConfigNode()
+	if err != nil {
+		return nil, err
+	}
+
+	return flattenKeyValues(rootNode), nil
+}
+
+func (c *ConfigInitializer) ListResolvedKeyValues() ([]string, error) {
+	rootNode, err := c.loadResolvedConfigNode()
+	if err != nil {
+		return nil, err
+	}
+
+	return flattenKeyValues(rootNode), nil
 }
 
 func (c *ConfigInitializer) GetValue(key string) (string, error) {
-	segments, err := splitDotPath(key)
-	if err != nil {
-		return "", err
-	}
-
 	rootNode, err := c.loadConfigNode()
 	if err != nil {
 		return "", err
 	}
 
-	valueNode, found := findYAMLNode(rootNode, segments)
-	if !found {
-		return "", fmt.Errorf("config key not found: %s", key)
+	return scalarValueFromNode(rootNode, key)
+}
+
+func (c *ConfigInitializer) GetResolvedValue(key string) (string, error) {
+	rootNode, err := c.loadResolvedConfigNode()
+	if err != nil {
+		return "", err
 	}
 
-	switch valueNode.Kind {
-	case yaml.MappingNode, yaml.SequenceNode:
-		return "", fmt.Errorf("config key is not a scalar value: %s", key)
-	default:
-		return valueNode.Value, nil
-	}
+	return scalarValueFromNode(rootNode, key)
 }
 
 func (c *ConfigInitializer) SetValue(key string, value string) error {
@@ -170,6 +182,32 @@ func (c *ConfigInitializer) UnsetValue(key string) error {
 	return nil
 }
 
+func flattenKeyValues(rootNode *yaml.Node) []string {
+	entries := flattenYAMLNode("", rootNode, nil)
+	sort.Strings(entries)
+
+	return entries
+}
+
+func scalarValueFromNode(rootNode *yaml.Node, key string) (string, error) {
+	segments, err := splitDotPath(key)
+	if err != nil {
+		return "", err
+	}
+
+	valueNode, found := findYAMLNode(rootNode, segments)
+	if !found {
+		return "", fmt.Errorf("config key not found: %s", key)
+	}
+
+	switch valueNode.Kind {
+	case yaml.MappingNode, yaml.SequenceNode:
+		return "", fmt.Errorf("config key is not a scalar value: %s", key)
+	default:
+		return valueNode.Value, nil
+	}
+}
+
 func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
 	configPath, err := c.existingConfigPath()
 	if err != nil {
@@ -183,6 +221,22 @@ func (c *ConfigInitializer) loadConfig() (*viper.Viper, error) {
 	}
 
 	return loadedConfig, nil
+}
+
+func (c *ConfigInitializer) templateContent() string {
+	if c.templateYAML != "" {
+		return c.templateYAML
+	}
+
+	return configtemplate.TemplateYAML()
+}
+
+func (c *ConfigInitializer) defaultContent() string {
+	if c.defaultYAML != "" {
+		return c.defaultYAML
+	}
+
+	return configtemplate.DefaultYAML()
 }
 
 func (c *ConfigInitializer) configPath() (string, error) {
@@ -219,17 +273,69 @@ func (c *ConfigInitializer) loadConfigNode() (*yaml.Node, error) {
 		return nil, err
 	}
 
+	return c.loadConfigNodeFromPath(configPath)
+}
+
+func (c *ConfigInitializer) loadOptionalConfigNode() (*yaml.Node, error) {
+	configPath, err := c.configPath()
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(configPath); errors.Is(err, os.ErrNotExist) {
+		return newDocumentNode(newMappingNode()), nil
+	} else if err != nil {
+		return nil, fmt.Errorf("stat config file: %w", err)
+	}
+
+	return c.loadConfigNodeFromPath(configPath)
+}
+
+func (c *ConfigInitializer) loadTemplateConfigNode() (*yaml.Node, error) {
+	templateYAML := c.templateContent()
+	if strings.TrimSpace(templateYAML) == "" {
+		return nil, fmt.Errorf("config template is empty")
+	}
+
+	return loadEmbeddedConfigNode(templateYAML, "config template")
+}
+
+func (c *ConfigInitializer) loadDefaultConfigNode() (*yaml.Node, error) {
+	defaultYAML := c.defaultContent()
+	if strings.TrimSpace(defaultYAML) == "" {
+		return nil, fmt.Errorf("default config is empty")
+	}
+
+	return loadEmbeddedConfigNode(defaultYAML, "default config")
+}
+
+func (c *ConfigInitializer) loadResolvedConfigNode() (*yaml.Node, error) {
+	templateNode, err := c.loadTemplateConfigNode()
+	if err != nil {
+		return nil, err
+	}
+
+	defaultNode, err := c.loadDefaultConfigNode()
+	if err != nil {
+		return nil, err
+	}
+
+	userNode, err := c.loadOptionalConfigNode()
+	if err != nil {
+		return nil, err
+	}
+
+	resolvedNode := mergeYAMLNodes(cloneYAMLNode(templateNode), defaultNode)
+	return mergeYAMLNodes(resolvedNode, userNode), nil
+}
+
+func (c *ConfigInitializer) loadConfigNodeFromPath(configPath string) (*yaml.Node, error) {
 	configContent, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
 
-	var rootNode yaml.Node
-	if err := yaml.Unmarshal(configContent, &rootNode); err != nil {
-		return nil, fmt.Errorf("parse config file: %w", err)
-	}
-
-	return &rootNode, nil
+	return parseYAMLNode(configContent, "config file")
 }
 
 func (c *ConfigInitializer) writeConfigNode(rootNode *yaml.Node) error {
@@ -253,6 +359,22 @@ func (c *ConfigInitializer) writeConfigNode(rootNode *yaml.Node) error {
 	}
 
 	return nil
+}
+
+func loadEmbeddedConfigNode(content string, source string) (*yaml.Node, error) {
+	return parseYAMLNode([]byte(content), source)
+}
+
+func parseYAMLNode(content []byte, source string) (*yaml.Node, error) {
+	var rootNode yaml.Node
+	if err := yaml.Unmarshal(content, &rootNode); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", source, err)
+	}
+	if rootNode.Kind == 0 {
+		return newDocumentNode(newMappingNode()), nil
+	}
+
+	return &rootNode, nil
 }
 
 func flattenYAMLNode(prefix string, node *yaml.Node, entries []string) []string {
@@ -438,6 +560,87 @@ func findYAMLNode(node *yaml.Node, segments []string) (*yaml.Node, bool) {
 	return nil, false
 }
 
+func cloneYAMLNode(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+
+	cloned := *node
+	if len(node.Content) > 0 {
+		cloned.Content = make([]*yaml.Node, len(node.Content))
+		for index, child := range node.Content {
+			cloned.Content[index] = cloneYAMLNode(child)
+		}
+	}
+
+	return &cloned
+}
+
+func mergeYAMLNodes(base *yaml.Node, override *yaml.Node) *yaml.Node {
+	if base == nil {
+		return cloneYAMLNode(override)
+	}
+	if override == nil {
+		return base
+	}
+
+	if base.Kind == yaml.DocumentNode {
+		if len(base.Content) == 0 {
+			base.Content = []*yaml.Node{newMappingNode()}
+		}
+		if override.Kind == yaml.DocumentNode {
+			if len(override.Content) == 0 {
+				return base
+			}
+			base.Content[0] = mergeYAMLNodes(base.Content[0], override.Content[0])
+			return base
+		}
+
+		base.Content[0] = mergeYAMLNodes(base.Content[0], override)
+		return base
+	}
+
+	if override.Kind == yaml.DocumentNode {
+		if len(override.Content) == 0 {
+			return base
+		}
+
+		return mergeYAMLNodes(base, override.Content[0])
+	}
+
+	if base.Kind == yaml.MappingNode && override.Kind == yaml.MappingNode {
+		for index := 0; index+1 < len(override.Content); index += 2 {
+			overrideKeyNode := override.Content[index]
+			overrideValueNode := override.Content[index+1]
+			baseValueIndex, found := findMappingValueIndex(base, overrideKeyNode.Value)
+			if !found {
+				base.Content = append(base.Content, cloneYAMLNode(overrideKeyNode), cloneYAMLNode(overrideValueNode))
+				continue
+			}
+
+			base.Content[baseValueIndex] = mergeYAMLNodes(base.Content[baseValueIndex], overrideValueNode)
+		}
+
+		return base
+	}
+
+	return cloneYAMLNode(override)
+}
+
+func findMappingValueIndex(node *yaml.Node, key string) (int, bool) {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return 0, false
+	}
+
+	for index := 0; index+1 < len(node.Content); index += 2 {
+		if node.Content[index].Value == key {
+			return index + 1, true
+		}
+	}
+
+	return 0, false
+}
+
 func deleteYAMLValueNode(node *yaml.Node, segments []string, traversed []string) (bool, bool, error) {
 	if node == nil {
 		return false, false, nil
@@ -526,6 +729,17 @@ func newKeyNode(value string) *yaml.Node {
 		Kind:  yaml.ScalarNode,
 		Tag:   "!!str",
 		Value: value,
+	}
+}
+
+func newDocumentNode(content *yaml.Node) *yaml.Node {
+	if content == nil {
+		content = newMappingNode()
+	}
+
+	return &yaml.Node{
+		Kind:    yaml.DocumentNode,
+		Content: []*yaml.Node{content},
 	}
 }
 

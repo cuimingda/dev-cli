@@ -22,13 +22,17 @@ func newConfigListCmd(initializer *ConfigInitializer) *cobra.Command {
 				return err
 			}
 
-			for _, entry := range entries {
-				if _, err := fmt.Fprintln(cmd.OutOrStdout(), entry); err != nil {
-					return err
-				}
-			}
-
-			return nil
+			return writeConfigEntries(cmd, entries)
 		},
 	}
+}
+
+func writeConfigEntries(cmd *cobra.Command, entries []string) error {
+	for _, entry := range entries {
+		if _, err := fmt.Fprintln(cmd.OutOrStdout(), entry); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

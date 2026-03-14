@@ -62,20 +62,23 @@ func TestConfigGetCommandPrintsValue(t *testing.T) {
 	if _, err := initializer.Init(); err != nil {
 		t.Fatalf("Init() returned error: %v", err)
 	}
+	if err := initializer.SetValue("github.client_id", "abc123"); err != nil {
+		t.Fatalf("SetValue() returned error: %v", err)
+	}
 
 	cmd := newRootCmdWithConfigInitializer(initializer)
 	var output bytes.Buffer
 
 	cmd.SetOut(&output)
 	cmd.SetErr(&output)
-	cmd.SetArgs([]string{"config", "get", "github.api_base_url"})
+	cmd.SetArgs([]string{"config", "get", "github.client_id"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("Execute() returned error: %v", err)
 	}
 
-	if output.String() != "https://api.github.com\n" {
-		t.Fatalf("output = %q, want %q", output.String(), "https://api.github.com\n")
+	if output.String() != "abc123\n" {
+		t.Fatalf("output = %q, want %q", output.String(), "abc123\n")
 	}
 }
 

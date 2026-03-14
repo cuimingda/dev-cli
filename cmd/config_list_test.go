@@ -77,7 +77,6 @@ func TestConfigListCommandListsKeyValues(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"github.api_base_url=https://api.github.com",
 		"github.client_id=",
 		"",
 	}, "\n")

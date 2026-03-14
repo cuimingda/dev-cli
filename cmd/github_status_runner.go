@@ -293,7 +293,7 @@ func (r *GitHubAuthStatusRunner) loadLocalStatus() (GitHubAuthStatusReport, erro
 		return GitHubAuthStatusReport{}, err
 	}
 
-	apiBaseURL, err := r.initializer.GetValue("github.api_base_url")
+	apiBaseURL, err := r.initializer.GetResolvedValue("github.api_base_url")
 	if err != nil {
 		return GitHubAuthStatusReport{}, err
 	}
@@ -519,7 +519,7 @@ func nextActionWithoutRefreshToken(clientIDPresent bool) GitHubAuthNextAction {
 }
 
 func optionalConfigValue(initializer *ConfigInitializer, key string) (string, bool, error) {
-	value, err := initializer.GetValue(key)
+	value, err := initializer.GetResolvedValue(key)
 	if err != nil {
 		if strings.Contains(err.Error(), "config key not found: "+key) {
 			return "", false, nil

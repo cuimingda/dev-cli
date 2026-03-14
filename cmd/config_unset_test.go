@@ -36,8 +36,8 @@ func TestConfigInitializerUnsetValueRemovesExistingKey(t *testing.T) {
 		t.Fatalf("ListKeyValues() returned error: %v", err)
 	}
 
-	if len(entries) != 1 || entries[0] != "github.api_base_url=https://api.github.com" {
-		t.Fatalf("entries = %#v, want only github.api_base_url", entries)
+	if len(entries) != 0 {
+		t.Fatalf("entries = %#v, want empty list", entries)
 	}
 }
 

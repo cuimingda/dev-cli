@@ -13,7 +13,7 @@ type githubAuthBaseConfig struct {
 }
 
 func loadGitHubAuthBaseConfig(initializer *ConfigInitializer) (githubAuthBaseConfig, error) {
-	apiBaseURL, err := initializer.GetValue("github.api_base_url")
+	apiBaseURL, err := initializer.GetResolvedValue("github.api_base_url")
 	if err != nil {
 		return githubAuthBaseConfig{}, err
 	}
@@ -30,7 +30,7 @@ func loadGitHubAuthBaseConfig(initializer *ConfigInitializer) (githubAuthBaseCon
 }
 
 func loadGitHubLoginConfig(initializer *ConfigInitializer) (githubLoginConfig, error) {
-	clientID, err := initializer.GetValue("github.client_id")
+	clientID, err := initializer.GetResolvedValue("github.client_id")
 	if err != nil {
 		return githubLoginConfig{}, err
 	}

@@ -9,7 +9,7 @@ func newConfigCmd(initializer *ConfigInitializer) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Manage user configuration",
+		Short: "Manage configuration",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
@@ -19,6 +19,8 @@ func newConfigCmd(initializer *ConfigInitializer) *cobra.Command {
 	cmd.AddCommand(newConfigInitCmd(initializer))
 	cmd.AddCommand(newConfigGetCmd(initializer))
 	cmd.AddCommand(newConfigListCmd(initializer))
+	cmd.AddCommand(newConfigDefaultCmd(initializer))
+	cmd.AddCommand(newConfigResolvedCmd(initializer))
 	cmd.AddCommand(newConfigSetCmd(initializer))
 	cmd.AddCommand(newConfigUnsetCmd(initializer))
 
