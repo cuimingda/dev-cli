@@ -1,2 +1,4 @@
 github:
   api_base_url: "https://api.github.com"
+workspace:
+  root: "$HOME/Projects"
