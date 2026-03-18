@@ -35,9 +35,11 @@ to quickly create a Cobra application.`,
 	}
 
 	cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	workspaceCDRunner := newDefaultWorkspaceCDRunner(initializer)
 	workspaceLister := newDefaultWorkspaceLister(initializer)
 	workspacePushRunner := newDefaultWorkspacePushRunner(initializer)
 	workspaceStatusRunner := newDefaultWorkspaceStatusRunner(initializer)
+	cmd.AddCommand(newCDCmd(workspaceCDRunner))
 	cmd.AddCommand(newConfigCmd(initializer))
 	cmd.AddCommand(newGitHubCmd(initializer, nil))
 	cmd.AddCommand(newPushCmd(workspacePushRunner))
@@ -45,6 +47,7 @@ to quickly create a Cobra application.`,
 	cmd.AddCommand(newStatusCmd(workspaceStatusRunner))
 	cmd.AddCommand(newTimezoneCmd(nil))
 	cmd.AddCommand(newWorkspaceCmd(initializer))
+	cmd.AddCommand(newZshInitCmd(cmd))
 	cmd.AddCommand(newLSCmd(workspaceLister))
 
 	return cmd
