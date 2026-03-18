@@ -7,6 +7,7 @@ func newWorkspaceCmd(initializer *ConfigInitializer) *cobra.Command {
 		initializer = newDefaultConfigInitializer()
 	}
 
+	workspaceIgnoredFilesRunner := newDefaultWorkspaceIgnoredFilesRunner(initializer)
 	workspaceInitializer := newDefaultWorkspaceInitializer(initializer)
 	workspaceLister := newDefaultWorkspaceLister(initializer)
 	workspacePushRunner := newDefaultWorkspacePushRunner(initializer)
@@ -22,6 +23,7 @@ func newWorkspaceCmd(initializer *ConfigInitializer) *cobra.Command {
 	}
 
 	cmd.AddCommand(newWorkspaceInitCmd(workspaceInitializer))
+	cmd.AddCommand(newWorkspaceLSIgnoredFilesCmd(workspaceIgnoredFilesRunner))
 	cmd.AddCommand(newWorkspaceListCmd(workspaceLister))
 	cmd.AddCommand(newWorkspacePushCmd(workspacePushRunner))
 	cmd.AddCommand(newWorkspaceStatusCmd(workspaceStatusRunner))
