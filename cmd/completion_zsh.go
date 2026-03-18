@@ -7,19 +7,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newZshInitCmd(rootCmd *cobra.Command) *cobra.Command {
+func newCompletionZshCmd(rootCmd *cobra.Command) *cobra.Command {
 	return &cobra.Command{
-		Use:          "zsh-init",
-		Short:        "Print zsh integration for dev cd and completion",
+		Use:          "zsh",
+		Short:        "Generate zsh completion and dev cd shell integration",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return writeZshInitScript(cmd.OutOrStdout(), rootCmd)
+			return writeZshCompletionScript(cmd.OutOrStdout(), rootCmd)
 		},
 	}
 }
 
-func writeZshInitScript(stdout io.Writer, rootCmd *cobra.Command) error {
+func writeZshCompletionScript(stdout io.Writer, rootCmd *cobra.Command) error {
 	if stdout == nil {
 		stdout = io.Discard
 	}
