@@ -36,9 +36,11 @@ to quickly create a Cobra application.`,
 
 	cmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	workspaceLister := newDefaultWorkspaceLister(initializer)
+	workspaceStatusRunner := newDefaultWorkspaceStatusRunner(initializer)
 	cmd.AddCommand(newConfigCmd(initializer))
 	cmd.AddCommand(newGitHubCmd(initializer, nil))
 	cmd.AddCommand(newRepoCmd(initializer))
+	cmd.AddCommand(newStatusCmd(workspaceStatusRunner))
 	cmd.AddCommand(newTimezoneCmd(nil))
 	cmd.AddCommand(newWorkspaceCmd(initializer))
 	cmd.AddCommand(newLSCmd(workspaceLister))
